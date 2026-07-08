@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from sendbots.models import FileGroup, ParsedFile
 from sendbots.parser import is_marked_sent, is_pdf, parse_file
+from sendbots.renamer import archive_marked_sent
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def is_file_stable(path: Path) -> bool:
@@ -29,7 +34,11 @@ def scan_folder(folder: Path) -> tuple[list[FileGroup], list[Path], list[Path]]:
         if not path.is_file() or not is_pdf(path):
             continue
         if is_marked_sent(path):
-            skipped_sent.append(path)
+            try:
+                archive_marked_sent(path)
+            except OSError:
+                LOGGER.exception("Falha ao mover arquivo enviado para a pasta Enviados: %s", path)
+                skipped_sent.append(path)
             continue
         parsed = parse_file(path)
         if parsed is None:

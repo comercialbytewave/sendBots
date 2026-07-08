@@ -20,17 +20,39 @@ class ConfigTest(unittest.TestCase):
         self.assertTrue(config.merge_pdfs_before_send)
         self.assertTrue(config.to_json()["merge_pdfs_before_send"])
 
+    def test_company_slug_round_trip(self) -> None:
+        config = AppConfig.from_json({"company_slug": "hents-burg"})
+
+        self.assertEqual(config.company_slug, "hents-burg")
+        self.assertEqual(config.to_json()["company_slug"], "hents-burg")
+
+    def test_company_slug_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = AppConfig(
+                api_base_url="https://api.test",
+                token="token",
+                watched_folder=tmp,
+            )
+
+            self.assertIn("Slug da loja e obrigatorio.", config.validate())
+
     def test_config_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.json"
             store = ConfigStore(path)
-            expected = AppConfig(api_base_url="https://api.test", token="token", watched_folder=tmp)
+            expected = AppConfig(
+                api_base_url="https://api.test",
+                token="token",
+                company_slug="hents-burg",
+                watched_folder=tmp,
+            )
 
             store.save(expected)
             loaded = store.load()
 
         self.assertEqual(loaded.api_base_url, expected.api_base_url)
         self.assertEqual(loaded.token, expected.token)
+        self.assertEqual(loaded.company_slug, expected.company_slug)
 
     def test_mask_token(self) -> None:
         self.assertEqual(mask_token("1234567890"), "1234...7890")

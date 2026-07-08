@@ -55,7 +55,8 @@ def _scan_once() -> None:
     groups, invalid, skipped = scan_folder(Path(config.watched_folder))
     print(f"Grupos encontrados: {len(groups)}")
     print(f"Arquivos invalidos: {len(invalid)}")
-    print(f"Arquivos ja enviados: {len(skipped)}")
+    if skipped:
+        print(f"Arquivos enviados que nao puderam ser movidos: {len(skipped)}")
 
     for path in invalid:
         detail = (

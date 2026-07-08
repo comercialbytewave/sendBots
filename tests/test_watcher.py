@@ -18,13 +18,13 @@ class WatcherTest(unittest.TestCase):
 
             groups, invalid, skipped = scan_folder(folder)
 
-        self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0].whatsapp, "5585998146212")
-        self.assertTrue(groups[0].is_pair_complete)
-        self.assertEqual(len(invalid), 1)
-        self.assertEqual(len(skipped), 1)
+            self.assertEqual(len(groups), 1)
+            self.assertEqual(groups[0].whatsapp, "5585998146212")
+            self.assertTrue(groups[0].is_pair_complete)
+            self.assertEqual(len(invalid), 1)
+            self.assertEqual(len(skipped), 0)
+            self.assertTrue((folder / "Enviados" / "Nfe0002_5585998146212_abc_ENV.pdf").exists())
 
 
 if __name__ == "__main__":
     unittest.main()
-

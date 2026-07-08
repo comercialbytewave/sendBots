@@ -1,6 +1,6 @@
 # SendBots
 
-Aplicativo desktop em Python para monitorar uma pasta de PDFs, identificar Notas Fiscais e Boletos pelo padrao de nomenclatura, enviar os arquivos pela API AlowChat e renomear arquivos enviados com `ENV`.
+Aplicativo desktop em Python para monitorar uma pasta de PDFs, identificar Notas Fiscais e Boletos pelo padrao de nomenclatura e enviar os arquivos pela API AlowChat. Apos o sucesso, os PDFs recebem a marcacao `ENV` e sao movidos para a subpasta `Enviados`.
 
 O aplicativo tambem pode juntar Nota Fiscal e Boleto em um unico PDF antes do envio quando a opcao estiver habilitada.
 
@@ -49,7 +49,8 @@ python3 -m unittest discover -s tests
 
 ## Gerar executavel Windows
 
-Veja [docs/MANUAL_USO.md](docs/MANUAL_USO.md) e os arquivos em `packaging/`.
+Veja o [manual de instalacao no Windows](docs/MANUAL_INSTALACAO_WINDOWS.md),
+o [manual de uso](docs/MANUAL_USO.md) e os arquivos em `packaging/`.
 
 ```powershell
 .\scripts\build_windows.ps1 -Installer

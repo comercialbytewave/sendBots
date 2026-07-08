@@ -13,6 +13,7 @@ MIN_SCAN_INTERVAL_SECONDS = 10
 class AppConfig:
     api_base_url: str = ""
     token: str = ""
+    company_slug: str = ""
     watched_folder: str = ""
     scan_interval_seconds: int = MIN_SCAN_INTERVAL_SECONDS
     message_body: str = "Segue nota fiscal e boleto."
@@ -28,7 +29,7 @@ class AppConfig:
 
     @property
     def endpoint_url(self) -> str:
-        return f"{self.api_base_url.rstrip('/')}/api/messages/send"
+        return f"{self.api_base_url.rstrip('/')}/api/company/messages/whatsapp"
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -36,6 +37,8 @@ class AppConfig:
             errors.append("URL base da API e obrigatoria.")
         if not self.token.strip():
             errors.append("Token Bearer e obrigatorio.")
+        if not self.company_slug.strip():
+            errors.append("Slug da loja e obrigatorio.")
         if not self.watched_folder.strip():
             errors.append("Pasta monitorada e obrigatoria.")
         elif not Path(self.watched_folder).exists():
@@ -54,6 +57,7 @@ class AppConfig:
         return {
             "api_base_url": self.api_base_url,
             "token": self.token,
+            "company_slug": self.company_slug,
             "watched_folder": self.watched_folder,
             "scan_interval_seconds": self.scan_interval_seconds,
             "message_body": self.message_body,
@@ -114,6 +118,17 @@ class FileGroup:
 @dataclass(slots=True)
 class SendResult:
     success: bool
+    status_code: int | None = None
+    response_body: str = ""
+    error: str = ""
+
+
+@dataclass(slots=True)
+class CompanyStatusResult:
+    success: bool
+    active: bool = False
+    name: str = ""
+    slug: str = ""
     status_code: int | None = None
     response_body: str = ""
     error: str = ""

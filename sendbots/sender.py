@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from pathlib import Path
 
 from sendbots.alowchat import AlowChatClient
@@ -11,6 +12,7 @@ from sendbots.storage import HistoryStore
 
 
 LOGGER = logging.getLogger(__name__)
+_COMPANY_STATUS_CACHE: dict[tuple[str, str, str], tuple[date, SendResult]] = {}
 
 
 class SenderService:
@@ -26,6 +28,13 @@ class SenderService:
             self.history.add(group.whatsapp, _file_names(group.files), "ignored", detail)
             return SendResult(False, None, "", detail)
 
+        company_status = self._ensure_company_active()
+        if not company_status.success:
+            detail = company_status.error or "Empresa inativa ou nao autorizada."
+            LOGGER.warning("Envio bloqueado para %s: %s", group.whatsapp, detail)
+            self.history.add(group.whatsapp, _file_names(group.files), "company_inactive", detail)
+            return company_status
+
         if self.config.merge_pdfs_before_send and group.is_pair_complete:
             return self._send_merged_group(group)
 
@@ -38,6 +47,31 @@ class SenderService:
             if not result.success:
                 final_result = result
         return final_result
+
+    def _ensure_company_active(self) -> SendResult:
+        cache_key = (
+            self.config.api_base_url.rstrip("/"),
+            self.config.company_slug.strip(),
+            self.config.token,
+        )
+        cached = _COMPANY_STATUS_CACHE.get(cache_key)
+        today = date.today()
+        if cached and cached[0] == today:
+            return cached[1]
+
+        status = self.client.check_company_status()
+        if status.success and status.active:
+            result = SendResult(
+                True,
+                status.status_code,
+                status.response_body,
+                "",
+            )
+        else:
+            detail = status.error or "A empresa esta inativa na AlowChat."
+            result = SendResult(False, status.status_code, status.response_body, detail)
+        _COMPANY_STATUS_CACHE[cache_key] = (today, result)
+        return result
 
     def _send_merged_group(self, group: FileGroup) -> SendResult:
         try:
@@ -62,7 +96,8 @@ class SenderService:
                 renamed = self._rename_files(group.files)
                 detail = (
                     f"PDF unico enviado: {merged_path.name}. "
-                    f"Arquivos originais renomeados: {', '.join(str(path.name) for path in renamed)}"
+                    f"Arquivos originais movidos para Enviados: "
+                    f"{', '.join(str(path.name) for path in renamed)}"
                 )
                 self.history.add(group.whatsapp, _file_names(group.files), "sent", detail)
             else:
@@ -77,7 +112,10 @@ class SenderService:
         result = self._send_files(whatsapp, files)
         if result.success:
             renamed = self._rename_files(files)
-            detail = f"Enviado com sucesso. Arquivos renomeados: {', '.join(str(path.name) for path in renamed)}"
+            detail = (
+                "Enviado com sucesso. Arquivos movidos para Enviados: "
+                f"{', '.join(str(path.name) for path in renamed)}"
+            )
             self.history.add(whatsapp, _file_names(files), "sent", detail)
             return result
 

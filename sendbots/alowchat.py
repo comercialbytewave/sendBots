@@ -5,8 +5,9 @@ import mimetypes
 import uuid
 from pathlib import Path
 from urllib import error, request
+from urllib.parse import quote
 
-from sendbots.models import AppConfig, ParsedFile, SendResult
+from sendbots.models import AppConfig, CompanyStatusResult, ParsedFile, SendResult
 
 
 def _bool_text(value: bool) -> str:
@@ -45,6 +46,53 @@ def build_multipart(fields: dict[str, str], files: list[Path]) -> tuple[bytes, s
 class AlowChatClient:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
+
+    def check_company_status(self) -> CompanyStatusResult:
+        slug = quote(self.config.company_slug.strip(), safe="")
+        url = f"{self.config.api_base_url.rstrip('/')}/api/company/status/{slug}"
+        headers = {
+            "Authorization": f"Bearer {self.config.token}",
+            "Accept": "application/json",
+        }
+        req = request.Request(url, headers=headers, method="GET")
+
+        try:
+            with request.urlopen(req, timeout=self.config.timeout_seconds) as response:
+                response_body = response.read().decode("utf-8", errors="replace")
+                try:
+                    data = json.loads(response_body)
+                except json.JSONDecodeError:
+                    return CompanyStatusResult(
+                        False,
+                        status_code=response.status,
+                        response_body=response_body,
+                        error="A API retornou uma resposta invalida ao consultar a empresa.",
+                    )
+
+                active = data.get("status") is True
+                name = str(data.get("name") or "")
+                returned_slug = str(data.get("slug") or "")
+                detail = "" if active else "A empresa esta inativa na AlowChat."
+                return CompanyStatusResult(
+                    True,
+                    active,
+                    name,
+                    returned_slug,
+                    response.status,
+                    response_body,
+                    detail,
+                )
+        except error.HTTPError as exc:
+            response_body = exc.read().decode("utf-8", errors="replace")
+            detail = _extract_error(response_body) or exc.reason
+            return CompanyStatusResult(
+                False,
+                status_code=exc.code,
+                response_body=response_body,
+                error=f"Falha ao consultar empresa: {detail}",
+            )
+        except Exception as exc:  # noqa: BLE001 - user-facing operational error.
+            return CompanyStatusResult(False, error=f"Falha ao consultar empresa: {exc}")
 
     def send(self, whatsapp: str, files: list[ParsedFile]) -> SendResult:
         fields = {
@@ -86,4 +134,3 @@ def _extract_error(response_body: str) -> str:
         if isinstance(value, str):
             return value
     return response_body[:500]
-

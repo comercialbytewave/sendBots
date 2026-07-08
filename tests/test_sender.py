@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from sendbots.models import AppConfig, FileGroup, ParsedFile, SendResult
+from sendbots.models import AppConfig, CompanyStatusResult, FileGroup, ParsedFile, SendResult
 from sendbots.sender import SenderService
 from sendbots.storage import HistoryStore
 
@@ -47,10 +47,21 @@ class SenderTest(unittest.TestCase):
             note = ParsedFile(note_path, "note", "31", "558598146212", "1234567489")
             boleto = ParsedFile(boleto_path, "boleto", "31", "558598146212", "123456789")
             group = FileGroup(whatsapp="558598146212", notes=[note], boletos=[boleto])
-            service = SenderService(AppConfig(merge_pdfs_before_send=True), HistoryStore(db_path))
+            service = SenderService(
+                AppConfig(
+                    api_base_url="https://api.test",
+                    token="token",
+                    company_slug="active-merge-test",
+                    merge_pdfs_before_send=True,
+                ),
+                HistoryStore(db_path),
+            )
             sent_files: list[str] = []
 
             class FakeClient:
+                def check_company_status(self) -> CompanyStatusResult:
+                    return CompanyStatusResult(True, active=True, name="Empresa Teste")
+
                 def send(self, whatsapp: str, files: list[ParsedFile]) -> SendResult:
                     sent_files.extend(path.path.name for path in files)
                     return SendResult(True, 200, "{}")
@@ -64,11 +75,42 @@ class SenderTest(unittest.TestCase):
 
             self.assertTrue(result.success)
             self.assertEqual(sent_files, ["Nota_Boleto_558598146212.pdf"])
-            self.assertTrue((folder / "Nfe31_558598146212_1234567489_ENV.pdf").exists())
-            self.assertTrue((folder / "Boleto31_558598146212_123456789_ENV.pdf").exists())
+            sent_folder = folder / "Enviados"
+            self.assertTrue((sent_folder / "Nfe31_558598146212_1234567489_ENV.pdf").exists())
+            self.assertTrue((sent_folder / "Boleto31_558598146212_123456789_ENV.pdf").exists())
             self.assertFalse(merged_path.exists())
             self.assertEqual(history[0].status, "sent")
             self.assertIn("PDF unico enviado", history[0].detail)
+
+    def test_inactive_company_blocks_send(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "history.sqlite3"
+            note = ParsedFile(Path("Nfe31_558598146212_key.pdf"), "note", "31", "558598146212", "key")
+            group = FileGroup(whatsapp="558598146212", notes=[note])
+            service = SenderService(
+                AppConfig(
+                    api_base_url="https://api.test",
+                    token="token",
+                    company_slug="inactive-sender-test",
+                    require_pair=False,
+                ),
+                HistoryStore(db_path),
+            )
+
+            class InactiveClient:
+                def check_company_status(self) -> CompanyStatusResult:
+                    return CompanyStatusResult(True, active=False, error="A empresa esta inativa na AlowChat.")
+
+                def send(self, whatsapp: str, files: list[ParsedFile]) -> SendResult:
+                    self.fail("send nao deveria ser chamado")  # type: ignore[attr-defined]
+
+            service.client = InactiveClient()  # type: ignore[assignment]
+            result = service.process_group(group)
+            history = service.history.latest()
+
+        self.assertFalse(result.success)
+        self.assertIn("inativa", result.error)
+        self.assertEqual(history[0].status, "company_inactive")
 
 
 if __name__ == "__main__":

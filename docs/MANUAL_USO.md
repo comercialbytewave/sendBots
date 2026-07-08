@@ -2,7 +2,7 @@
 
 ## 1. Finalidade
 
-O SendBots monitora uma pasta local, identifica arquivos PDF de Nota Fiscal e Boleto, envia os documentos pela API AlowChat e renomeia arquivos enviados com `ENV`.
+O SendBots monitora uma pasta local, identifica arquivos PDF de Nota Fiscal e Boleto, envia os documentos pela API AlowChat e move os arquivos enviados para a subpasta `Enviados`.
 
 ## 2. Padrao dos arquivos
 
@@ -30,7 +30,7 @@ Exemplo:
 Boleto0001_5585998146212_123123123123.pdf
 ```
 
-Depois do envio:
+Depois do envio, a subpasta `Enviados` e criada automaticamente e recebe:
 
 ```text
 Nfe0001_5585998146212_12312313212315_ENV.pdf
@@ -43,6 +43,7 @@ Na aba `Configuracao`, preencher:
 
 - URL base AlowChat.
 - Token Bearer.
+- Slug da loja, por exemplo `hents-burg`.
 - Pasta monitorada.
 - Mensagem.
 - Intervalo de varredura, minimo de 10 segundos.
@@ -59,10 +60,23 @@ Na aba `Configuracao`, preencher:
 O endpoint usado pelo aplicativo sera:
 
 ```text
-[URL base]/api/messages/send
+[URL base]/api/company/messages/whatsapp
 ```
 
-Quando `Juntar nota e boleto em um PDF` estiver ativo, o aplicativo cria um PDF temporario contendo primeiro a Nota Fiscal e depois o Boleto. Apenas esse PDF unico e enviado para a API. Depois do sucesso, os arquivos originais sao renomeados com `ENV` e o PDF temporario e removido.
+Ao clicar em `Validar` ou `Salvar`, o SendBots consulta:
+
+```text
+[URL base]/api/company/status/[Slug da loja]
+```
+
+O token e enviado no cabecalho `Authorization: Bearer`. A configuracao somente e
+salva quando a API confirma `status: true`. Antes de enviar documentos, o status
+tambem e verificado e mantido em cache por no maximo um dia. Empresas inativas
+ou que nao possam ser verificadas nao enviam arquivos.
+
+Quando `Juntar nota e boleto em um PDF` estiver ativo, o aplicativo cria um PDF temporario contendo primeiro a Nota Fiscal e depois o Boleto. Apenas esse PDF unico e enviado para a API. Depois do sucesso, os arquivos originais recebem `ENV`, sao movidos para `Enviados` e o PDF temporario e removido.
+
+Arquivos `_ENV` de versoes anteriores que ainda estiverem na pasta monitorada tambem sao movidos automaticamente para `Enviados` na proxima varredura.
 
 ## 4. Operacao
 

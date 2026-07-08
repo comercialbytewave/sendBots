@@ -7,6 +7,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from sendbots.alowchat import AlowChatClient
 from sendbots.config import ConfigStore, database_path, logs_dir, mask_token
 from sendbots.models import AppConfig, FileGroup, MIN_SCAN_INTERVAL_SECONDS
 from sendbots.sender import SenderService
@@ -45,6 +46,7 @@ class SendBotsApp(tk.Tk):
     def _build_variables(self) -> None:
         self.api_base_url_var = tk.StringVar()
         self.token_var = tk.StringVar()
+        self.company_slug_var = tk.StringVar()
         self.folder_var = tk.StringVar()
         self.interval_var = tk.IntVar(value=MIN_SCAN_INTERVAL_SECONDS)
         self.user_id_var = tk.StringVar()
@@ -97,6 +99,10 @@ class SendBotsApp(tk.Tk):
         row += 1
         ttk.Label(frame, text="Token Bearer").grid(row=row, column=0, sticky="w", pady=4)
         ttk.Entry(frame, textvariable=self.token_var, show="*").grid(row=row, column=1, sticky="ew", pady=4)
+
+        row += 1
+        ttk.Label(frame, text="Slug da loja").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Entry(frame, textvariable=self.company_slug_var).grid(row=row, column=1, sticky="ew", pady=4)
 
         row += 1
         ttk.Label(frame, text="Pasta monitorada").grid(row=row, column=0, sticky="w", pady=4)
@@ -191,6 +197,7 @@ class SendBotsApp(tk.Tk):
         config = self.app_config
         self.api_base_url_var.set(config.api_base_url)
         self.token_var.set(config.token)
+        self.company_slug_var.set(config.company_slug)
         self.folder_var.set(config.watched_folder)
         self.interval_var.set(config.scan_interval_seconds)
         self.user_id_var.set(config.user_id)
@@ -209,6 +216,7 @@ class SendBotsApp(tk.Tk):
         return AppConfig(
             api_base_url=self.api_base_url_var.get().strip(),
             token=self.token_var.get().strip(),
+            company_slug=self.company_slug_var.get().strip(),
             watched_folder=self.folder_var.get().strip(),
             scan_interval_seconds=max(int(self.interval_var.get()), MIN_SCAN_INTERVAL_SECONDS),
             message_body=self.message_text.get("1.0", tk.END).strip(),
@@ -234,10 +242,22 @@ class SendBotsApp(tk.Tk):
         if errors:
             messagebox.showerror("Configuracao invalida", "\n".join(errors))
             return False
+        company = AlowChatClient(config).check_company_status()
+        if not company.success or not company.active:
+            detail = company.error or "A empresa esta inativa na AlowChat."
+            self._append_log(f"Configuracao nao salva: {detail}")
+            messagebox.showerror("Empresa nao autorizada", detail)
+            return False
         self.config_store.save(config)
         self.app_config = config
-        self._append_log(f"Configuracao salva. Token: {mask_token(config.token)}")
-        messagebox.showinfo("Configuracao", "Configuracao salva com sucesso.")
+        company_name = company.name or config.company_slug
+        self._append_log(
+            f"Configuracao salva. Empresa ativa: {company_name}. Token: {mask_token(config.token)}"
+        )
+        messagebox.showinfo(
+            "Configuracao",
+            f"Configuracao salva com sucesso.\nEmpresa ativa: {company_name}.",
+        )
         return True
 
     def _validate_config_message(self) -> None:
@@ -246,7 +266,15 @@ class SendBotsApp(tk.Tk):
         if errors:
             messagebox.showerror("Configuracao invalida", "\n".join(errors))
             return
-        messagebox.showinfo("Configuracao", "Configuracao valida.")
+        company = AlowChatClient(config).check_company_status()
+        if not company.success or not company.active:
+            detail = company.error or "A empresa esta inativa na AlowChat."
+            self._append_log(f"Validacao da empresa falhou: {detail}")
+            messagebox.showerror("Empresa nao autorizada", detail)
+            return
+        company_name = company.name or config.company_slug
+        self._append_log(f"Empresa validada e ativa: {company_name} ({config.company_slug}).")
+        messagebox.showinfo("Configuracao", f"Empresa ativa: {company_name}.")
 
     def _start_monitoring(self) -> None:
         if not self._save_config():
@@ -296,7 +324,7 @@ class SendBotsApp(tk.Tk):
             groups, invalid, skipped = scan_folder(folder)
             self.message_queue.put(
                 "Varredura: "
-                f"{len(groups)} grupo(s), {len(invalid)} invalido(s), {len(skipped)} ja enviado(s). "
+                f"{len(groups)} grupo(s), {len(invalid)} invalido(s). "
                 f"Aguardar par: {'sim' if self.app_config.require_pair else 'nao'}. "
                 f"Enviar anexos juntos: {'sim' if self.app_config.send_files_together else 'nao'}. "
                 f"Juntar PDFs: {'sim' if self.app_config.merge_pdfs_before_send else 'nao'}."
@@ -310,7 +338,9 @@ class SendBotsApp(tk.Tk):
                 self.message_queue.put(f"Arquivo invalido ignorado: {path}. {detail}")
                 self.history.add("", [str(path)], "invalid", detail)
             for path in skipped:
-                self.message_queue.put(f"Arquivo ja marcado como enviado ignorado: {path.name}")
+                self.message_queue.put(
+                    f"Nao foi possivel mover o arquivo enviado para a pasta Enviados: {path.name}"
+                )
 
             service = SenderService(self.app_config, self.history)
             for group in groups:
