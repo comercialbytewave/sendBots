@@ -1,0 +1,20 @@
+[project]
+name = "sendbots"
+version = "0.1.0"
+description = "Aplicativo desktop para envio de notas fiscais e boletos via AlowChat"
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow>=10.0.0",
+    "pypdf>=4.0.0",
+    "pystray>=0.19.5",
+]
+
+[project.scripts]
+sendbots = "sendbots.main:main"
+
+[tool.setuptools]
+packages = ["sendbots"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
